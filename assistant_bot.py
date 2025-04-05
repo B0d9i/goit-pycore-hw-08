@@ -31,6 +31,15 @@ def input_error(func):
     # внутрішня функція для обробки помилок
     def inner(args, contacts, command):
         try:
+            # Спочатку перевіряємо кількість аргументів, щоб IndexError мав пріоритет
+            if command == "add" and len(args) != 2:
+                raise IndexError
+            elif command == "change" and len(args) != 3:
+                raise IndexError
+            elif command == "phone" and len(args) != 1:
+                raise IndexError
+            elif command == "all" and len(args) > 0:
+                raise IndexError
             return func(args, contacts, command)
         except ValueError as e:
             msg = error_messages.get(command, error_messages["default"])["ValueError"]
@@ -75,10 +84,18 @@ class Record:
         self.name = Name(name)
         self.phones = []
 
-    def add_phone(self, phone_number):
-        """Додає телефон до списку."""
+    def add_phone(self, phone_number, book):
+        """Додає телефон до списку з перевіркою на дублювання."""
         phone = Phone(phone_number)
+        # Перевірка, чи номер уже є у цього контакту
+        if any(p.value == phone_number for p in self.phones):
+            return f"Помилка: Номер '{phone_number}' уже є у контакта '{self.name.value}'"
+        # Перевірка, чи номер є в іншого контакту
+        for record in book.data.values():
+            if record != self and any(p.value == phone_number for p in record.phones):
+                return f"Помилка: Номер '{phone_number}' уже є у іншого контакта '{record.name.value}'"
         self.phones.append(phone)
+        return None  # Успішно додано
 
     def remove_phone(self, phone_number):
         """Видаляє телефон зі списку."""
@@ -90,7 +107,7 @@ class Record:
             if phone.value == old_phone:
                 self.phones[i] = Phone(new_phone)
                 return
-        raise ValueError(f"Телефон {old_phone} не знайдено в контакті '{self.name.value}'.")
+        raise ValueError(f"Телефон '{old_phone}' не знайдено в контакті '{self.name.value}'.")
 
     def find_phone(self, phone_number):
         """Шукає телефон у списку."""
@@ -131,10 +148,14 @@ def add_contact(args, book, command):
     name, phone = args
     record = book.find(name)
     if record:
-        record.add_phone(phone)
+        result = record.add_phone(phone, book)
+        if result:  # Якщо повернуто повідомлення про помилку
+            return result
     else:
         record = Record(name)
-        record.add_phone(phone)
+        result = record.add_phone(phone, book)
+        if result:
+            return result
         book.add_record(record)
     return "Контакт додано."
 
@@ -144,7 +165,14 @@ def change_contact(args, book, command):
     name, old_phone, new_phone = args
     record = book.find(name)
     if not record:
-        raise KeyError
+        return f"Помилка у команді 'change': Контакт '{name}' не знайдено в адресній книзі"
+    # Перевірка, чи старий номер існує
+    if not record.find_phone(old_phone):
+        return f"Помилка у команді 'change': Номер '{old_phone}' не знайдено у контакта '{name}'"
+    # Перевірка, чи новий номер уже є в іншого контакту
+    for other_record in book.data.values():
+        if other_record != record and any(p.value == new_phone for p in other_record.phones):
+            return f"Помилка у команді 'change': Номер '{new_phone}' уже є у іншого контакта '{other_record.name.value}'"
     record.edit_phone(old_phone, new_phone)
     return "Контакт оновлено."
 
@@ -163,18 +191,17 @@ def show_all(args, book, command):
     if not book.data:
         return "Список контактів порожній."
     return "\n".join(str(record) for record in book.data.values())
-    
+
 
 # Основна функція бота
 def main():
-    # contacts = {}
     book = AddressBook()
     print("\nЛаскаво просимо до бота-помічника!")
     
     while True:
         user_input = input("\nВведіть команду: ").strip()
         if not user_input:
-            print("\nВведіть команду!")
+            print("Введіть команду!")
             continue
         
         command, *args = parse_input(user_input)
@@ -183,20 +210,14 @@ def main():
             print("\nДо побачення!")
             break
         elif command == "info":
-            print("\nhello, hi, привіт - вітання"
+            print("hello, hi, привіт - вітання"
                   "\nadd <ім'я> <телефон> - додати контакт"
                   "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
                   "\nphone <ім'я> - показати номери"
                   "\nall - показати всі контакти"
                   "\nclose, exit, ex - вихід")
         elif command in ["hello", "hi", "привіт"]:
-            print("\nЧим я можу вам допомогти?"
-                  "\nhello, hi, привіт - вітання"
-                  "\nadd <ім'я> <телефон> - додати контакт"
-                  "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
-                  "\nphone <ім'я> - показати номери"
-                  "\nall - показати всі контакти"
-                  "\nclose, exit, ex - вихід")
+            print("Чим я можу вам допомогти?")
         elif command == "add":
             print(add_contact(args, book, command))
         elif command == "change":
@@ -206,7 +227,7 @@ def main():
         elif command == "all":
             print(show_all(args, book, command))
         else:
-            print("\nНедійсна команда.")
+            print("Недійсна команда.")
 
 if __name__ == "__main__":
     main()
