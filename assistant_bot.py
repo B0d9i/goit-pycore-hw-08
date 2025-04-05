@@ -4,21 +4,48 @@ from collections import UserDict
 
 # Декоратор для обробки помилок введення
 def input_error(func):
+    # Визначити словник конфігурації помилок для кожної команди
+    error_messages = {
+        "add": {
+            "ValueError": "Помилка у команді 'add': Номер телефону має бути 10 цифр (наприклад, 'add John 1234567890')",
+            "IndexError": "Помилка у команді 'add': Потрібно 2 аргументи: ім'я та телефон (наприклад, 'add John 1234567890')"
+        },
+        "change": {
+            "ValueError": "Помилка у команді 'change': Новий номер телефону має бути 10 цифр (наприклад, 'change John 1234567890 1112223333')",
+            "IndexError": "Помилка у команді 'change': Потрібно 3 аргументи: ім'я, старий телефон, новий телефон (наприклад, 'change John 1234567890 1112223333')"
+        },
+        "phone": {
+            "ValueError": "Помилка у команді 'phone': Введіть коректне ім’я (наприклад, 'phone John')",
+            "IndexError": "Помилка у команді 'phone': Потрібно 1 аргумент: ім’я (наприклад, 'phone John')"
+        },
+        "all": {
+            "IndexError": "Помилка у команді 'all': Аргументи не потрібні, просто введіть 'all'"
+        },
+        "default": {
+            "ValueError": "Помилка: Некоректні дані для команди '{command}'",
+            "IndexError": "Помилка: Некоректна кількість аргументів для команди '{command}'"
+        }
+    }
+    
     @wraps(func)
+    # внутрішня функція для обробки помилок
     def inner(args, contacts, command):
         try:
             return func(args, contacts, command)
-        except ValueError:
-            if command == "phone":
-                return f"Помилка у команді 'phone': Введіть phone та ім'я (наприклад, 'phone John')."
-            return f"Помилка у команді '{command}': Введіть ім’я та номер телефону (наприклад, '{command} John 1234567890')."
+        except ValueError as e:
+            msg = error_messages.get(command, error_messages["default"])["ValueError"]
+            args_str = " ".join(args) if args else "немає аргументів"
+            return f"{msg}. Ви ввели: '{args_str}'"
         except KeyError:
-            name = args[0] if args else "невідоме ім'я"
-            return f"Помилка: Контакт '{name}' не знайдено в списку."
+            name = args[0] if args else "невідоме ім’я"
+            return f"Помилка у команді '{command}': Контакт '{name}' не знайдено в адресній книзі"
         except IndexError:
-            if command == "phone":
-                return f"Помилка у команді '{command}': Введіть ім'я (наприклад, '{command} John')."
-            return f"Помилка у команді '{command}': Введіть коректні аргументи (наприклад, '{command} Ім'я Телефон')."
+            msg = error_messages.get(command, error_messages["default"])["IndexError"]
+            args_str = " ".join(args) if args else "немає аргументів"
+            return f"{msg}. Ви ввели: '{args_str}'"
+        except Exception as e:
+            args_str = " ".join(args) if args else "немає аргументів"
+            return f"Помилка у команді '{command}': Щось пішло не так ({str(e)}). Ви ввели: '{args_str}'"
     return inner
 
 #####
@@ -63,7 +90,7 @@ class Record:
             if phone.value == old_phone:
                 self.phones[i] = Phone(new_phone)
                 return
-        raise ValueError(f"Телефон {old_phone} не знайдено.")
+        raise ValueError(f"Телефон {old_phone} не знайдено в контакті '{self.name.value}'.")
 
     def find_phone(self, phone_number):
         """Шукає телефон у списку."""
@@ -101,9 +128,7 @@ def parse_input(user_input):
 # Функція для додавання контакту
 @input_error
 def add_contact(args, book, command):
-    name, phone = args  # Може викликати IndexError
-    #contacts[name] = phone
-
+    name, phone = args
     record = book.find(name)
     if record:
         record.add_phone(phone)
@@ -111,16 +136,12 @@ def add_contact(args, book, command):
         record = Record(name)
         record.add_phone(phone)
         book.add_record(record)
-
     return "Контакт додано."
 
 # Функція для зміни номера телефону контакту
 @input_error
 def change_contact(args, book, command):
-    name, old_phone, new_phone = args  # Може викликати IndexError
-    # if name not in contacts:
-    #     raise KeyError  # Викликаємо KeyError, якщо контакт не існує
-    # contacts[name] = phone
+    name, old_phone, new_phone = args
     record = book.find(name)
     if not record:
         raise KeyError
@@ -130,10 +151,7 @@ def change_contact(args, book, command):
 # Функція для показу номера телефону за ім’ям
 @input_error
 def show_phone(args, book, command):
-    name = args[0]  # Може викликати IndexError
-    # if name not in contacts:
-    #     raise KeyError  # Викликаємо KeyError, якщо контакт не існує
-    # return contacts[name]
+    name = args[0]
     record = book.find(name)
     if not record:
         raise KeyError
@@ -141,11 +159,9 @@ def show_phone(args, book, command):
 
 # Функція для показу всіх контактів
 @input_error
-def show_all(args, book, command):  # Додано args для консистентності з декоратором
+def show_all(args, book, command):
     if not book.data:
         return "Список контактів порожній."
-    # result = "\n".join(f"{name}: {phone}" for name, phone in contacts.items())
-    # return result
     return "\n".join(str(record) for record in book.data.values())
     
 
@@ -153,31 +169,32 @@ def show_all(args, book, command):  # Додано args для консисте�
 def main():
     # contacts = {}
     book = AddressBook()
-    print("Ласкаво просимо до бота-помічника!")# повідомлення на початку програми
+    print("\nЛаскаво просимо до бота-помічника!")
     
     while True:
-        user_input = input("Введіть команду: ").strip()
+        user_input = input("\nВведіть команду: ").strip()
         if not user_input:
-            print("Введіть команду!")
+            print("\nВведіть команду!")
             continue
         
         command, *args = parse_input(user_input)
 
         if command in ["close", "exit", "ex"]:
-            print("До побачення!")
+            print("\nДо побачення!")
             break
         elif command == "info":
-            print("hello, hi, привіт - вітання"
-                  "\nadd - додати контакт"
-                  "\nchange - змінити контакт"
-                  "\nphone - показати номер"
+            print("\nhello, hi, привіт - вітання"
+                  "\nadd <ім'я> <телефон> - додати контакт"
+                  "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
+                  "\nphone <ім'я> - показати номери"
                   "\nall - показати всі контакти"
                   "\nclose, exit, ex - вихід")
         elif command in ["hello", "hi", "привіт"]:
-            print("Чим я можу вам допомогти?"
-                  "\n\nadd - додати контакт"
-                  "\nchange - змінити контакт"
-                  "\nphone - показати номер"
+            print("\nЧим я можу вам допомогти?"
+                  "\nhello, hi, привіт - вітання"
+                  "\nadd <ім'я> <телефон> - додати контакт"
+                  "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
+                  "\nphone <ім'я> - показати номери"
                   "\nall - показати всі контакти"
                   "\nclose, exit, ex - вихід")
         elif command == "add":
@@ -189,7 +206,7 @@ def main():
         elif command == "all":
             print(show_all(args, book, command))
         else:
-            print("Недійсна команда.")
+            print("\nНедійсна команда.")
 
 if __name__ == "__main__":
     main()
