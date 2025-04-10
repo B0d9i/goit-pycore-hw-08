@@ -1,6 +1,7 @@
 import sys
 from functools import wraps
 from collections import UserDict
+from datetime import datetime, timedelta
 
 # Декоратор для обробки помилок введення
 def input_error(func):
@@ -21,15 +22,24 @@ def input_error(func):
         "all": {
             "IndexError": "Помилка у команді 'all': Аргументи не потрібні, просто введіть 'all'"
         },
+        "add-birthday": {
+            "ValueError": "Помилка у команді 'add-birthday': Некоректний формат дати. Використовуйте DD.MM.YYYY (наприклад, 'add-birthday John 15.05.1990')",
+            "IndexError": "Помилка у команді 'add-birthday': Потрібно 2 аргументи: ім’я та дата народження (наприклад, 'add-birthday John 15.05.1990')"
+        },
+        "show-birthday": {
+            "IndexError": "Помилка у команді 'show-birthday': Потрібно 1 аргумент: ім’я (наприклад, 'show-birthday John')"
+        },
+        "birthdays": {
+            "IndexError": "Помилка у команді 'birthdays': Аргументи не потрібні, просто введіть 'birthdays'"
+        },
         "default": {
-            "ValueError": "Помилка: Некоректні дані для команди '{command}'",
-            "IndexError": "Помилка: Некоректна кількість аргументів для команди '{command}'"
+            "ValueError": "Помилка: Некоректні дані",
+            "IndexError": "Помилка: Некоректна кількість аргументів"
         }
     }
     
     @wraps(func)
-    # внутрішня функція для обробки помилок
-    def inner(args, contacts, command):
+    def inner(args, book, command=None):
         try:
             # Спочатку перевіряємо кількість аргументів, щоб IndexError мав пріоритет
             if command == "add" and len(args) != 2:
@@ -40,7 +50,13 @@ def input_error(func):
                 raise IndexError
             elif command == "all" and len(args) > 0:
                 raise IndexError
-            return func(args, contacts, command)
+            elif command == "add-birthday" and len(args) != 2:
+                raise IndexError
+            elif command == "show-birthday" and len(args) != 1:
+                raise IndexError
+            elif command == "birthdays" and len(args) > 0:
+                raise IndexError
+            return func(args, book, command) if 'command' in func.__code__.co_varnames else func(args, book)
         except ValueError as e:
             msg = error_messages.get(command, error_messages["default"])["ValueError"]
             args_str = " ".join(args) if args else "немає аргументів"
@@ -78,11 +94,19 @@ class Phone(Field):
             raise ValueError("Номер телефону має містити рівно 10 цифр.")
         super().__init__(value)
 
+class Birthday(Field):
+    def __init__(self, value):
+        try:
+            self.value = datetime.strptime(value, "%d.%m.%Y").date()
+        except ValueError:
+            raise ValueError("Неправельний формат дати. Використовуй DD.MM.YYYY")
+
 # Клас для зберігання інформації про контакт
 class Record:
     def __init__(self, name):
         self.name = Name(name)
         self.phones = []
+        self.birthday = None  # Додано поле для дати народження
 
     def add_phone(self, phone_number, book):
         """Додає телефон до списку з перевіркою на дублювання."""
@@ -116,8 +140,17 @@ class Record:
                 return phone.value
         return None
 
+    def add_birthday(self, birthday):
+        if self.birthday:
+            return f"Помилка: День народження для '{self.name.value}' уже встановлено ({self.birthday.value.strftime('%d.%m.%Y')})"
+        self.birthday = Birthday(birthday)
+        return None   
+
     def __str__(self):
-        return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
+        # return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
+        phones = '; '.join(p.value for p in self.phones) if self.phones else "немає телефонів"
+        birthday = self.birthday.value.strftime("%d.%m.%Y") if self.birthday else "немає даних"
+        return f"Contact name: {self.name.value}, phones: {phones}, birthday: {birthday}"
 
 # Клас для управління адресною книгою
 class AddressBook(UserDict):
@@ -134,6 +167,35 @@ class AddressBook(UserDict):
         if name in self.data:
             del self.data[name]
 
+    def get_upcoming_birthdays(self):
+        today = datetime.today().date()
+        upcoming = []
+        
+        for record in self.data.values():
+            if not record.birthday:
+                continue
+            birthday = record.birthday.value
+            birthday_this_year = birthday.replace(year=today.year)
+            
+            if birthday_this_year < today:
+                birthday_this_year = birthday_this_year.replace(year=today.year + 1)
+            
+            delta = (birthday_this_year - today).days
+            
+            if 0 <= delta <= 7:
+                weekday = birthday_this_year.weekday()
+                if weekday >= 5:  # Субота або неділя
+                    days_to_add = 7 - weekday if weekday == 5 else 1
+                    congratulation_date = birthday_this_year + timedelta(days=days_to_add)
+                else:
+                    congratulation_date = birthday_this_year
+                
+                upcoming.append({
+                    "name": record.name.value,
+                    "congratulation_date": congratulation_date.strftime("%d.%m.%Y")
+                })
+        
+        return upcoming
 #####
 
 # Функція для розбору введеного рядка на команду та аргументи
@@ -192,6 +254,36 @@ def show_all(args, book, command):
         return "Список контактів порожній."
     return "\n".join(str(record) for record in book.data.values())
 
+@input_error
+def add_birthday(args, book, command):
+    name, birthday = args
+    record = book.find(name)
+    if not record:
+        raise KeyError  # Виправлено з IndexError на KeyError
+    result = record.add_birthday(birthday)
+    if result:
+        return result
+    return f"Birthday added for {name}."
+
+@input_error
+def show_birthday(args, book):
+    name = args[0]
+    record = book.find(name)
+    if not record:
+        raise KeyError
+    if not record.birthday:
+        return f"No birthday set for {name}."
+    return f"Birthday of {name}: {record.birthday.value.strftime('%d.%m.%Y')}"
+
+@input_error
+def birthdays(args, book):
+    upcoming = book.get_upcoming_birthdays()
+    if not upcoming:
+        return "No upcoming birthdays in the next week."
+    result = "Upcoming birthdays:\n"
+    for entry in upcoming:
+        result += f"{entry['name']}: {entry['congratulation_date']}\n"
+    return result.strip()
 
 # Основна функція бота
 def main():
@@ -215,6 +307,9 @@ def main():
                   "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
                   "\nphone <ім'я> - показати номери"
                   "\nall - показати всі контакти"
+                  "\nadd-birthday <ім'я> <дата> - додати день народження"
+                  "\nshow-birthday <ім'я> - показати день народження"
+                  "\nbirthdays - показати найближчі дні народження"
                   "\nclose, exit, ex - вихід")
         elif command in ["hello", "hi", "привіт"]:
             print("Чим я можу вам допомогти?")
@@ -226,6 +321,12 @@ def main():
             print(show_phone(args, book, command))
         elif command == "all":
             print(show_all(args, book, command))
+        elif command == "add-birthday":
+            print(add_birthday(args, book, command))
+        elif command == "show-birthday":
+            print(show_birthday(args, book))
+        elif command == "birthdays":
+            print(birthdays(args, book))
         else:
             print("Недійсна команда.")
 
