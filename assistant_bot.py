@@ -32,6 +32,13 @@ def input_error(func):
         "birthdays": {
             "IndexError": "Помилка у команді 'birthdays': Аргументи не потрібні, просто введіть 'birthdays'"
         },
+        "delete-phone": {
+            "ValueError": "Помилка у команді 'delete-phone': Телефон не знайдено у контакта (наприклад, 'delete-phone John 1234567890')",
+            "IndexError": "Помилка у команді 'delete-phone': Потрібно 2 аргументи: ім’я та телефон (наприклад, 'delete-phone John 1234567890')"
+        },
+        "delete-contact": {
+            "IndexError": "Помилка у команді 'delete-contact': Потрібно 1 аргумент: ім’я (наприклад, 'delete-contact John')"
+        },
         "default": {
             "ValueError": "Помилка: Некоректні дані",
             "IndexError": "Помилка: Некоректна кількість аргументів"
@@ -55,6 +62,10 @@ def input_error(func):
             elif command == "show-birthday" and len(args) != 1:
                 raise IndexError
             elif command == "birthdays" and len(args) > 0:
+                raise IndexError
+            elif command == "delete-phone" and len(args) != 2:
+                raise IndexError
+            elif command == "delete-contact" and len(args) != 1:
                 raise IndexError
             return func(args, book, command) if 'command' in func.__code__.co_varnames else func(args, book)
         except ValueError as e:
@@ -123,7 +134,10 @@ class Record:
 
     def remove_phone(self, phone_number):
         """Видаляє телефон зі списку."""
+        if not any(p.value == phone_number for p in self.phones):
+            raise ValueError(f"Телефон '{phone_number}' не знайдено в контакті '{self.name.value}'")
         self.phones = [p for p in self.phones if p.value != phone_number]
+        return f"Телефон '{phone_number}' видалено з контакту '{self.name.value}'"
 
     def edit_phone(self, old_phone, new_phone):
         """Редагує існуючий телефон."""
@@ -147,7 +161,6 @@ class Record:
         return None   
 
     def __str__(self):
-        # return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}"
         phones = '; '.join(p.value for p in self.phones) if self.phones else "немає телефонів"
         birthday = self.birthday.value.strftime("%d.%m.%Y") if self.birthday else "немає даних"
         return f"Contact name: {self.name.value}, phones: {phones}, birthday: {birthday}"
@@ -164,8 +177,10 @@ class AddressBook(UserDict):
 
     def delete(self, name):
         """Видаляє запис за ім’ям."""
-        if name in self.data:
-            del self.data[name]
+        if name not in self.data:
+            raise KeyError
+        del self.data[name]
+        return f"Контакт '{name}' видалено"
 
     def get_upcoming_birthdays(self):
         today = datetime.today().date()
@@ -259,14 +274,14 @@ def add_birthday(args, book, command):
     name, birthday = args
     record = book.find(name)
     if not record:
-        raise KeyError  # Виправлено з IndexError на KeyError
+        raise KeyError
     result = record.add_birthday(birthday)
     if result:
         return result
     return f"Birthday added for {name}."
 
 @input_error
-def show_birthday(args, book):
+def show_birthday(args, book, command):
     name = args[0]
     record = book.find(name)
     if not record:
@@ -276,7 +291,7 @@ def show_birthday(args, book):
     return f"Birthday of {name}: {record.birthday.value.strftime('%d.%m.%Y')}"
 
 @input_error
-def birthdays(args, book):
+def birthdays(args, book, command):
     upcoming = book.get_upcoming_birthdays()
     if not upcoming:
         return "No upcoming birthdays in the next week."
@@ -284,6 +299,26 @@ def birthdays(args, book):
     for entry in upcoming:
         result += f"{entry['name']}: {entry['congratulation_date']}\n"
     return result.strip()
+
+# Нова функція для видалення телефону
+@input_error
+def delete_phone(args, book, command):
+    name, phone = args
+    record = book.find(name)
+    if not record:
+        raise KeyError
+    result = record.remove_phone(phone)
+    return result
+
+# Нова функція для видалення контакту
+@input_error
+def delete_contact(args, book, command):
+    name = args[0]
+    record = book.find(name)
+    if not record:
+        raise KeyError
+    result = book.delete(name)
+    return result
 
 # Основна функція бота
 def main():
@@ -310,6 +345,8 @@ def main():
                   "\nadd-birthday <ім'я> <дата> - додати день народження"
                   "\nshow-birthday <ім'я> - показати день народження"
                   "\nbirthdays - показати найближчі дні народження"
+                  "\ndelete-phone <ім'я> <телефон> - видалити телефон контакту"
+                  "\ndelete-contact <ім'я> - видалити контакт"
                   "\nclose, exit, ex - вихід")
         elif command in ["hello", "hi", "привіт"]:
             print("Чим я можу вам допомогти?")
@@ -324,9 +361,13 @@ def main():
         elif command == "add-birthday":
             print(add_birthday(args, book, command))
         elif command == "show-birthday":
-            print(show_birthday(args, book))
+            print(show_birthday(args, book, command))
         elif command == "birthdays":
-            print(birthdays(args, book))
+            print(birthdays(args, book, command))
+        elif command == "delete-phone":
+            print(delete_phone(args, book, command))
+        elif command == "delete-contact":
+            print(delete_contact(args, book, command))
         else:
             print("Недійсна команда.")
 
