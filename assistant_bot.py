@@ -3,53 +3,54 @@ from functools import wraps
 from collections import UserDict
 from datetime import datetime, timedelta
 import pickle
+import difflib
 
 # Декоратор для обробки помилок введення
 def input_error(func):
     # Визначити словник конфігурації помилок для кожної команди
     error_messages = {
         "add": {
-            "ValueError": "Помилка у команді 'add': Номер телефону має бути 10 цифр (наприклад, 'add John 1234567890')",
-            "IndexError": "Помилка у команді 'add': Потрібно 2 аргументи: ім'я та телефон (наприклад, 'add John 1234567890')"
+            "ValueError": "",  # Буде замінено динамічними повідомленнями
+            "IndexError": "Вибачте, для команди 'add' потрібні ім'я та номер телефону. Наприклад: 'add Іван 0661234567'"
         },
         "change": {
-            "ValueError": "Помилка у команді 'change': Новий номер телефону має бути 10 цифр (наприклад, 'change John 1234567890 1112223333')",
-            "IndexError": "Помилка у команді 'change': Потрібно 3 аргументи: ім'я, старий телефон, новий телефон (наприклад, 'change John 1234567890 1112223333')"
+            "ValueError": "",  # Буде замінено динамічними повідомленнями
+            "IndexError": "Вибачте, для команди 'change' потрібні ім'я, старий і новий номери. Наприклад: 'change Іван 0661234567 0961234567'"
         },
         "phone": {
-            "ValueError": "Помилка у команді 'phone': Введіть коректне ім’я (наприклад, 'phone John')",
-            "IndexError": "Помилка у команді 'phone': Потрібно 1 аргумент: ім’я (наприклад, 'phone John')"
+            "ValueError": "Вибачте, ім'я має містити лише літери. Наприклад: 'phone Іван'",
+            "IndexError": "Вибачте, для команди 'phone' потрібне лише ім'я. Наприклад: 'phone Іван'"
         },
         "all": {
-            "IndexError": "Помилка у команді 'all': Аргументи не потрібні, просто введіть 'all'"
+            "IndexError": "Команда 'all' не потребує аргументів. Просто введіть 'all'."
         },
         "add-birthday": {
-            "ValueError": "Помилка у команді 'add-birthday': Некоректний формат дати. Використовуйте DD.MM.YYYY (наприклад, 'add-birthday John 15.05.1990')",
-            "IndexError": "Помилка у команді 'add-birthday': Потрібно 2 аргументи: ім’я та дата народження (наприклад, 'add-birthday John 15.05.1990')"
+            "ValueError": "",  # Буде замінено динамічними повідомленнями
+            "IndexError": "Вибачте, для команди 'add-birthday' потрібні ім'я та дата (DD.MM.YYYY). Наприклад: 'add-birthday Іван 15.05.1990'"
         },
         "show-birthday": {
-            "IndexError": "Помилка у команді 'show-birthday': Потрібно 1 аргумент: ім’я (наприклад, 'show-birthday John')"
+            "IndexError": "Вибачте, для команди 'show-birthday' потрібне лише ім'я. Наприклад: 'show-birthday Іван'"
         },
         "birthdays": {
-            "IndexError": "Помилка у команді 'birthdays': Аргументи не потрібні, просто введіть 'birthdays'"
+            "IndexError": "Команда 'birthdays' не потребує аргументів. Просто введіть 'birthdays'."
         },
         "delete-phone": {
-            "ValueError": "Помилка у команді 'delete-phone': Телефон не знайдено у контакта (наприклад, 'delete-phone John 1234567890')",
-            "IndexError": "Помилка у команді 'delete-phone': Потрібно 2 аргументи: ім’я та телефон (наприклад, 'delete-phone John 1234567890')"
+            "ValueError": "Вибачте, цей номер телефону не знайдено у контакта.",
+            "IndexError": "Вибачте, для команди 'delete-phone' потрібні ім'я та номер телефону. Наприклад: 'delete-phone Іван 0661234567'"
         },
         "delete-contact": {
-            "IndexError": "Помилка у команді 'delete-contact': Потрібно 1 аргумент: ім’я (наприклад, 'delete-contact John')"
+            "IndexError": "Вибачте, для команди 'delete-contact' потрібне лише ім'я. Наприклад: 'delete-contact Іван'"
         },
         "default": {
-            "ValueError": "Помилка: Некоректні дані",
-            "IndexError": "Помилка: Некоректна кількість аргументів"
+            "ValueError": "Вибачте, введено некоректні дані.",
+            "IndexError": "Вибачте, введено некоректну кількість аргументів."
         }
     }
     
     @wraps(func)
     def inner(args, book, command=None):
         try:
-            # Спочатку перевіряємо кількість аргументів, щоб IndexError мав пріоритет
+            # Перевірка кількості аргументів
             if command == "add" and len(args) != 2:
                 raise IndexError
             elif command == "change" and len(args) != 3:
@@ -68,21 +69,20 @@ def input_error(func):
                 raise IndexError
             elif command == "delete-contact" and len(args) != 1:
                 raise IndexError
-            return func(args, book, command) if 'command' in func.__code__.co_varnames else func(args, book)
+            return func(args, book, command)
         except ValueError as e:
-            msg = error_messages.get(command, error_messages["default"])["ValueError"]
             args_str = " ".join(args) if args else "немає аргументів"
-            return f"{msg}. Ви ввели: '{args_str}'"
+            return f"{str(e)}. Ви ввели: '{args_str}'"
         except KeyError:
             name = args[0] if args else "невідоме ім’я"
-            return f"Помилка у команді '{command}': Контакт '{name}' не знайдено в адресній книзі"
+            return f"Вибачте, контакт '{name}' не знайдено в адресній книзі."
         except IndexError:
             msg = error_messages.get(command, error_messages["default"])["IndexError"]
             args_str = " ".join(args) if args else "немає аргументів"
             return f"{msg}. Ви ввели: '{args_str}'"
         except Exception as e:
             args_str = " ".join(args) if args else "немає аргументів"
-            return f"Помилка у команді '{command}': Щось пішло не так ({str(e)}). Ви ввели: '{args_str}'"
+            return f"Вибачте, щось пішло не так: {str(e)}. Ви ввели: '{args_str}'"
     return inner
 
 #####
@@ -97,21 +97,38 @@ class Field:
 
 # Клас для зберігання імені (обов’язкове поле)
 class Name(Field):
-    pass
+    def __init__(self, value):
+        if not value.replace(" ", "").isalpha():
+            raise ValueError("Ім'я має містити лише літери. Наприклад: Іван або Анна Марія")
+        super().__init__(value)
 
 # Клас для зберігання номера телефону з валідацією
 class Phone(Field):
     def __init__(self, value):
-        if not (value.isdigit() and len(value) == 10):
-            raise ValueError("Номер телефону має містити рівно 10 цифр.")
+        # Перевірка довжини
+        if not value.isdigit():
+            raise ValueError("Номер телефону має містити лише цифри.")
+        if len(value) != 10:
+            raise ValueError(f"Номер телефону має містити 10 цифр, а у вас {len(value)}.")
+        # Перевірка коду оператора
+        valid_codes = ["050", "066", "067", "068", "095", "096", "097", "098", "099", "063", "073", "093"]
+        if not any(value.startswith(code) for code in valid_codes):
+            raise ValueError("Номер має починатися з коду оператора, наприклад: 066, 096, 050 тощо.")
         super().__init__(value)
 
 class Birthday(Field):
     def __init__(self, value):
         try:
-            self.value = datetime.strptime(value, "%d.%m.%Y").date()
-        except ValueError:
-            raise ValueError("Неправельний формат дати. Використовуй DD.MM.YYYY")
+            date_obj = datetime.strptime(value, "%d.%m.%Y").date()
+            if date_obj > datetime.now().date():
+                raise ValueError("Дата народження не може бути в майбутньому.")
+            if date_obj.year < 1900:
+                raise ValueError("Рік народження виглядає нереалістичним. Перевірте, будь ласка.")
+            self.value = date_obj
+        except ValueError as e:
+            if str(e).startswith("Дата народження") or str(e).startswith("Рік народження"):
+                raise
+            raise ValueError(f"Некоректний формат дати. Використовуйте DD.MM.YYYY, наприклад, 15.05.1990. Помилка: {str(e)}")
 
 # Клас для зберігання інформації про контакт
 class Record:
@@ -122,31 +139,37 @@ class Record:
 
     def add_phone(self, phone_number, book):
         """Додає телефон до списку з перевіркою на дублювання."""
-        phone = Phone(phone_number)
+        try:
+            phone = Phone(phone_number)
+        except ValueError as e:
+            return str(e)
         # Перевірка, чи номер уже є у цього контакту
         if any(p.value == phone_number for p in self.phones):
-            return f"Помилка: Номер '{phone_number}' уже є у контакта '{self.name.value}'"
+            return f"Цей номер '{phone_number}' уже є у контакта '{self.name.value}'."
         # Перевірка, чи номер є в іншого контакту
         for record in book.data.values():
             if record != self and any(p.value == phone_number for p in record.phones):
-                return f"Помилка: Номер '{phone_number}' уже є у іншого контакта '{record.name.value}'"
+                return f"Цей номер '{phone_number}' уже належить контакту '{record.name.value}'."
         self.phones.append(phone)
         return None  # Успішно додано
 
     def remove_phone(self, phone_number):
         """Видаляє телефон зі списку."""
         if not any(p.value == phone_number for p in self.phones):
-            raise ValueError(f"Телефон '{phone_number}' не знайдено в контакті '{self.name.value}'")
+            raise ValueError(f"Номер '{phone_number}' не знайдено в контакті '{self.name.value}'.")
         self.phones = [p for p in self.phones if p.value != phone_number]
-        return f"Телефон '{phone_number}' видалено з контакту '{self.name.value}'"
+        return f"Номер '{phone_number}' успішно видалено з контакту '{self.name.value}'."
 
     def edit_phone(self, old_phone, new_phone):
         """Редагує існуючий телефон."""
         for i, phone in enumerate(self.phones):
             if phone.value == old_phone:
-                self.phones[i] = Phone(new_phone)
-                return
-        raise ValueError(f"Телефон '{old_phone}' не знайдено в контакті '{self.name.value}'.")
+                try:
+                    self.phones[i] = Phone(new_phone)
+                    return
+                except ValueError as e:
+                    raise ValueError(str(e))
+        raise ValueError(f"Номер '{old_phone}' не знайдено в контакті '{self.name.value}'.")
 
     def find_phone(self, phone_number):
         """Шукає телефон у списку."""
@@ -158,14 +181,17 @@ class Record:
     def add_birthday(self, birthday):
         """Додає день народження до контакту."""
         if self.birthday:
-            return f"Помилка: День народження для '{self.name.value}' уже встановлено ({self.birthday.value.strftime('%d.%m.%Y')})"
-        self.birthday = Birthday(birthday)
-        return None   
+            return f"День народження для '{self.name.value}' уже встановлено: {self.birthday.value.strftime('%d.%m.%Y')}."
+        try:
+            self.birthday = Birthday(birthday)
+            return None
+        except ValueError as e:
+            return str(e)
 
     def __str__(self):
         phones = '; '.join(p.value for p in self.phones) if self.phones else "немає телефонів"
         birthday = self.birthday.value.strftime("%d.%m.%Y") if self.birthday else "немає даних"
-        return f"Contact name: {self.name.value}, phones: {phones}, birthday: {birthday}"
+        return f"👤 {self.name.value}\n📞 Телефони: {phones}\n🎂 День народження: {birthday}"
 
 # Клас для управління адресною книгою
 class AddressBook(UserDict):
@@ -182,7 +208,7 @@ class AddressBook(UserDict):
         if name not in self.data:
             raise KeyError
         del self.data[name]
-        return f"Контакт '{name}' видалено"
+        return f"Контакт '{name}' успішно видалено."
 
     def get_upcoming_birthdays(self):
         today = datetime.today().date()
@@ -231,30 +257,42 @@ def load_data(filename="addressbook.pkl"):
             for record in book.data.values():
                 if record.birthday and not isinstance(record.birthday, Birthday):
                     try:
-                        # Спроба конвертувати рядок у Birthday
                         record.birthday = Birthday(record.birthday)
                     except (ValueError, AttributeError, TypeError):
-                        # Якщо конвертація неможлива, скидаємо birthday до None
                         record.birthday = None
             return book
     except (FileNotFoundError, pickle.UnpicklingError, AttributeError):
-        # Повернення нової адресної книги у разі будь-якої помилки десеріалізації
         return AddressBook()
 
+# Функція для пошуку схожих команд
+def suggest_command(input_cmd, valid_commands):
+    matches = difflib.get_close_matches(input_cmd, valid_commands, n=10, cutoff=0.5)#n -ксть, cutoff - поріг схожості
+    if matches:
+        if len(matches) == 1:
+            return f"Можливо, ви мали на увазі '{matches[0]}'? Спробуйте ще раз!"
+        else:
+            return f"Можливо, ви мали на увазі одну з цих команд: {', '.join(f'\'{m}\'' for m in matches)}? Спробуйте ще раз!"
+    return "Вибачте, такої команди не існує. Введіть 'help' для списку команд."
 # Функція для розбору введеного рядка на команду та аргументи
 def parse_input(user_input):
-    cmd, *args = user_input.split()
+    cmd, *args = user_input.split(maxsplit=3)  # Обмежуємо розбиття для change
     cmd = cmd.strip().lower()
-    return cmd, *args
+    return cmd, args
 
 # Функція для додавання контакту
 @input_error
 def add_contact(args, book, command):
+    if len(args) != 2:
+        raise IndexError
     name, phone = args
+    try:
+        Name(name)  # Перевірка імені
+    except ValueError as e:
+        return str(e)
     record = book.find(name)
     if record:
         result = record.add_phone(phone, book)
-        if result:  # Якщо повернуто повідомлення про помилку
+        if result:
             return result
     else:
         record = Record(name)
@@ -262,86 +300,119 @@ def add_contact(args, book, command):
         if result:
             return result
         book.add_record(record)
-    return "Контакт додано."
+    return f"Чудово! Контакт '{name}' додано з номером '{phone}'."
 
 # Функція для зміни номера телефону контакту
 @input_error
 def change_contact(args, book, command):
+    if len(args) != 3:
+        raise IndexError
     name, old_phone, new_phone = args
     record = book.find(name)
     if not record:
-        return f"Помилка у команді 'change': Контакт '{name}' не знайдено в адресній книзі"
-    # Перевірка, чи старий номер існує
+        return f"Вибачте, контакт '{name}' не знайдено в адресній книзі."
     if not record.find_phone(old_phone):
-        return f"Помилка у команді 'change': Номер '{old_phone}' не знайдено у контакта '{name}'"
-    # Перевірка, чи новий номер уже є в іншого контакту
+        return f"Номер '{old_phone}' не знайдено у контакта '{name}'."
     for other_record in book.data.values():
         if other_record != record and any(p.value == new_phone for p in other_record.phones):
-            return f"Помилка у команді 'change': Номер '{new_phone}' уже є у іншого контакта '{other_record.name.value}'"
-    record.edit_phone(old_phone, new_phone)
-    return "Контакт оновлено."
+            return f"Номер '{new_phone}' уже належить контакту '{other_record.name.value}'."
+    try:
+        record.edit_phone(old_phone, new_phone)
+        return f"Номер для '{name}' успішно змінено на '{new_phone}'."
+    except ValueError as e:
+        return str(e)
 
 # Функція для показу номера телефону за ім’ям
 @input_error
 def show_phone(args, book, command):
     name = args[0]
+    try:
+        Name(name)  # Перевірка імені
+    except ValueError as e:
+        return str(e)
     record = book.find(name)
     if not record:
         raise KeyError
-    return "; ".join(phone.value for phone in record.phones)
+    phones = "; ".join(phone.value for phone in record.phones) if record.phones else "немає телефонів"
+    return f"📞 Номери для '{name}': {phones}"
 
 # Функція для показу всіх контактів
 @input_error
 def show_all(args, book, command):
     if not book.data:
-        return "Список контактів порожній."
-    return "\n".join(str(record) for record in book.data.values())
+        return "Ваша адресна книга поки порожня. Додайте контакт за допомогою 'add'!"
+    result = "📋 Усі контакти:\n" + "-" * 30 + "\n"
+    result += "\n\n".join(str(record) for record in book.data.values())
+    return result
 
 @input_error
 def add_birthday(args, book, command):
+    if len(args) != 2:
+        raise IndexError
     name, birthday = args
+    try:
+        Name(name)  # Перевірка імені
+    except ValueError as e:
+        return str(e)
     record = book.find(name)
     if not record:
         raise KeyError
     result = record.add_birthday(birthday)
     if result:
         return result
-    return f"Birthday added for {name}."
+    return f"🎉 День народження для '{name}' додано: {birthday}."
 
 @input_error
 def show_birthday(args, book, command):
     name = args[0]
+    try:
+        Name(name)  # Перевірка імені
+    except ValueError as e:
+        return str(e)
     record = book.find(name)
     if not record:
         raise KeyError
     if not record.birthday:
-        return f"No birthday set for {name}."
-    return f"Birthday of {name}: {record.birthday.value.strftime('%d.%m.%Y')}"
+        return f"Для '{name}' день народження ще не встановлено."
+    return f"🎂 День народження '{name}': {record.birthday.value.strftime('%d.%m.%Y')}"
 
 @input_error
 def birthdays(args, book, command):
     upcoming = book.get_upcoming_birthdays()
     if not upcoming:
-        return "No upcoming birthdays in the next week."
-    result = "Upcoming birthdays:\n"
+        return "Найближчим часом днів народження немає."
+    result = "🎈 Найближчі дні народження:\n"
     for entry in upcoming:
-        result += f"{entry['name']}: {entry['congratulation_date']}\n"
+        result += f"- {entry['name']}: {entry['congratulation_date']}\n"
     return result.strip()
 
 # Нова функція для видалення телефону
 @input_error
 def delete_phone(args, book, command):
+    if len(args) != 2:
+        raise IndexError
     name, phone = args
+    try:
+        Name(name)  # Перевірка імені
+    except ValueError as e:
+        return str(e)
     record = book.find(name)
     if not record:
         raise KeyError
-    result = record.remove_phone(phone)
-    return result
+    try:
+        result = record.remove_phone(phone)
+        return result
+    except ValueError as e:
+        return str(e)
 
 # Нова функція для видалення контакту
 @input_error
 def delete_contact(args, book, command):
     name = args[0]
+    try:
+        Name(name)  # Перевірка імені
+    except ValueError as e:
+        return str(e)
     record = book.find(name)
     if not record:
         raise KeyError
@@ -351,36 +422,41 @@ def delete_contact(args, book, command):
 # Основна функція бота
 def main():
     book = load_data()  # Завантаження адресної книги при запуску
-    print("\nЛаскаво просимо до бота-помічника!")
+    valid_commands = [
+        "hello", "hi", "привіт", "info", "help", "?", "add", "change", "phone",
+        "all", "add-birthday", "show-birthday", "birthdays", "delete-phone",
+        "delete-contact", "close", "exit", "ex"
+    ]
+    print("\n📚 Ласкаво просимо до вашого помічника з контактами! 😊")
+    print("Введіть 'help', щоб побачити всі доступні команди.")
     
     while True:
         user_input = input("\nВведіть команду: ").strip()
         if not user_input:
-            print("Введіть команду!")
+            print("Ой, ви нічого не ввели! Спробуйте ще раз або введіть 'help' для підказки.")
             continue
         
-        command, *args = parse_input(user_input)
+        command, args = parse_input(user_input)
 
         if command in ["close", "exit", "ex"]:
-            save_data(book)  # Збереження адресної книги перед виходом
-            print("\nДо побачення!")
+            save_data(book)
+            print("\nДо зустрічі! Ваші контакти збережено. 👋")
             break
         elif command in ["info", "help", "?"]:
-            print("Доступні команди:"
-                  "\ninfo, help, ? - показати цю довідку"
-                  "\nhello, hi, привіт - вітання"
-                  "\nadd <ім'я> <телефон> - додати контакт"
-                  "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
-                  "\nphone <ім'я> - показати номери"
-                  "\nall - показати всі контакти"
-                  "\nadd-birthday <ім'я> <дата> - додати день народження"
-                  "\nshow-birthday <ім'я> - показати день народження"
-                  "\nbirthdays - показати найближчі дні народження"
-                  "\ndelete-phone <ім'я> <телефон> - видалити телефон контакту"
-                  "\ndelete-contact <ім'я> - видалити контакт"
-                  "\nclose, exit, ex - вихід")
+            print("📋 Доступні команди:")
+            print("- hello, hi, привіт: привітатися з ботом")
+            print("- add <ім'я> <телефон>: додати контакт (наприклад, 'add Іван 0661234567')")
+            print("- change <ім'я> <старий телефон> <новий телефон>: змінити номер")
+            print("- phone <ім'я>: показати номери контакта")
+            print("- all: показати всі контакти")
+            print("- add-birthday <ім'я> <дата>: додати день народження (DD.MM.YYYY)")
+            print("- show-birthday <ім'я>: показати день народження")
+            print("- birthdays: показати найближчі дні народження")
+            print("- delete-phone <ім'я> <телефон>: видалити номер")
+            print("- delete-contact <ім'я>: видалити контакт")
+            print("- close, exit, ex: зберегти та вийти")
         elif command in ["hello", "hi", "привіт"]:
-            print("Чим я можу вам допомогти?")
+            print("Привіт! Як я можу допомогти вам сьогодні? 😊")
         elif command == "add":
             print(add_contact(args, book, command))
         elif command == "change":
@@ -400,7 +476,7 @@ def main():
         elif command == "delete-contact":
             print(delete_contact(args, book, command))
         else:
-            print("Недійсна команда.")
+            print(suggest_command(command, valid_commands))
 
 if __name__ == "__main__":
     main()
