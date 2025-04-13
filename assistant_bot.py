@@ -2,6 +2,7 @@ import sys
 from functools import wraps
 from collections import UserDict
 from datetime import datetime, timedelta
+import pickle
 
 # Декоратор для обробки помилок введення
 def input_error(func):
@@ -155,6 +156,7 @@ class Record:
         return None
 
     def add_birthday(self, birthday):
+        """Додає день народження до контакту."""
         if self.birthday:
             return f"Помилка: День народження для '{self.name.value}' уже встановлено ({self.birthday.value.strftime('%d.%m.%Y')})"
         self.birthday = Birthday(birthday)
@@ -212,6 +214,32 @@ class AddressBook(UserDict):
         
         return upcoming
 #####
+
+# Функція для збереження адресної книги у файл
+def save_data(book, filename="addressbook.pkl"):
+    """Зберігає адресну книгу у файл за допомогою pickle."""
+    with open(filename, "wb") as f:
+        pickle.dump(book, f)
+
+# Функція для завантаження адресної книги з файлу
+def load_data(filename="addressbook.pkl"):
+    """Завантажує адресну книгу з файлу або повертає нову, якщо файл не знайдено."""
+    try:
+        with open(filename, "rb") as f:
+            book = pickle.load(f)
+            # Перевірка та виправлення старих даних
+            for record in book.data.values():
+                if record.birthday and not isinstance(record.birthday, Birthday):
+                    try:
+                        # Спроба конвертувати рядок у Birthday
+                        record.birthday = Birthday(record.birthday)
+                    except (ValueError, AttributeError, TypeError):
+                        # Якщо конвертація неможлива, скидаємо birthday до None
+                        record.birthday = None
+            return book
+    except (FileNotFoundError, pickle.UnpicklingError, AttributeError):
+        # Повернення нової адресної книги у разі будь-якої помилки десеріалізації
+        return AddressBook()
 
 # Функція для розбору введеного рядка на команду та аргументи
 def parse_input(user_input):
@@ -322,7 +350,7 @@ def delete_contact(args, book, command):
 
 # Основна функція бота
 def main():
-    book = AddressBook()
+    book = load_data()  # Завантаження адресної книги при запуску
     print("\nЛаскаво просимо до бота-помічника!")
     
     while True:
@@ -334,10 +362,13 @@ def main():
         command, *args = parse_input(user_input)
 
         if command in ["close", "exit", "ex"]:
+            save_data(book)  # Збереження адресної книги перед виходом
             print("\nДо побачення!")
             break
-        elif command == "info":
-            print("hello, hi, привіт - вітання"
+        elif command in ["info", "help", "?"]:
+            print("Доступні команди:"
+                  "\ninfo, help, ? - показати цю довідку"
+                  "\nhello, hi, привіт - вітання"
                   "\nadd <ім'я> <телефон> - додати контакт"
                   "\nchange <ім'я> <старий телефон> <новий телефон> - змінити телефон"
                   "\nphone <ім'я> - показати номери"
